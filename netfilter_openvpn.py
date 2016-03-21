@@ -74,6 +74,10 @@ if config.USE_SYSLOG:
 if not config.USE_MOZDEF:
 	mdmsg.syslogOnly = True
 
+ldap_member_attr = 'member'
+if config.LDAP_MEMBER_ATTR:
+	ldap_member_attr = config.LDAP_MEMBER_ATTR
+
 @contextmanager
 def lock_timeout(seconds):
 	def timeout_handler(signum, frame):
@@ -220,13 +224,13 @@ def load_ldap():
 	conn = ldap.initialize(config.LDAP_URL)
 	conn.simple_bind_s(config.LDAP_BIND_DN, config.LDAP_BIND_PASSWD)
 	res = conn.search_s(config.LDAP_BASE_DN, ldap.SCOPE_SUBTREE, config.LDAP_FILTER,
-						['cn', 'member', 'ipHostNumber'])
+						['cn', ldap_member_attr, 'ipHostNumber'])
 	schema = {}
 	for grp in res:
 		ulist = []
 		hlist = []
 		group = grp[1]['cn'][0]
-		for u in grp[1]['member']:
+		for u in grp[1][ldap_member_attr]:
 			try:
 				ulist.append(u.split('=')[1].split(',')[0])
 			except:
