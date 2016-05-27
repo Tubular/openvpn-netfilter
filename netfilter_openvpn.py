@@ -75,7 +75,7 @@ if not config.USE_MOZDEF:
 	mdmsg.syslogOnly = True
 
 ldap_member_attr = 'member'
-if config.LDAP_MEMBER_ATTR:
+if hasattr(config, 'LDAP_MEMBER_ATTR'):
 	ldap_member_attr = config.LDAP_MEMBER_ATTR
 
 @contextmanager
