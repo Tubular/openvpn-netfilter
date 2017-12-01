@@ -2,7 +2,7 @@ INSTALL	:= install
 DESTDIR	:= /
 PREFIX	:= /usr
 PACKAGE := openvpn-netfilter
-VERSION := 1.0.0
+VERSION := 1.0.3
 
 all:
 	./setup.py build
@@ -12,11 +12,11 @@ pyinstall:
 
 rpm:
 	$(MAKE) DESTDIR=./tmp install
-	fpm -s dir -t rpm -d python-mozdef_client -n $(PACKAGE) -v $(VERSION) -C tmp etc usr
+	fpm -s dir -t rpm -n $(PACKAGE) -v $(VERSION) -C tmp etc usr
 
 deb:
 	$(MAKE) DESTDIR=./tmp install
-	fpm -s dir -t deb -d python-mozdef_client -n $(PACKAGE) -v $(VERSION) -C tmp etc usr
+	fpm -s dir -t deb -n $(PACKAGE) -v $(VERSION) -C tmp etc usr
 
 pypi:
 	python setup.py sdist check upload --sign

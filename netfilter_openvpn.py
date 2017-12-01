@@ -78,6 +78,10 @@ ldap_member_attr = 'member'
 if hasattr(config, 'LDAP_MEMBER_ATTR'):
 	ldap_member_attr = config.LDAP_MEMBER_ATTR
 
+email_as_username = False
+if hasattr(config, 'EMAIL_AS_USERNAME'):
+	email_as_username = config.EMAIL_AS_USERNAME
+
 @contextmanager
 def lock_timeout(seconds):
 	def timeout_handler(signum, frame):
@@ -171,6 +175,15 @@ def build_firewall_rule(name, usersrcip, destip, destport=None, protocol=None,
 	"""
 	if comment:
 		comment = " -m comment --comment \"" + comment + "\""
+	if protocol and not destport:
+		rule = "-A {name} -s {srcip} -d {dstip} -p {proto}{comment} -j ACCEPT".format(
+					name=name,
+					srcip=usersrcip,
+					dstip=destip,
+					proto=protocol,
+					comment=comment
+				)
+		iptables(rule)
 	if destport and protocol:
 		destport = ' -m multiport --dports ' + destport
 		protocol = ' -p ' + protocol
@@ -184,7 +197,7 @@ def build_firewall_rule(name, usersrcip, destip, destport=None, protocol=None,
 				)
 		iptables(rule)
 	else:
-		entry = "--add {name} {dstip}".format(name=name, dstip=destip)
+		entry = "-! add {name} {dstip}".format(name=name, dstip=destip)
 		ipset(entry)
 
 def fetch_ips_from_file(fd):
@@ -232,7 +245,11 @@ def load_ldap():
 		group = grp[1]['cn'][0]
 		for u in grp[1][ldap_member_attr]:
 			try:
-				ulist.append(u.split('=')[1].split(',')[0])
+				if email_as_username:
+					u_email = conn.search_s(u, ldap.SCOPE_SUBTREE, config.LDAP_USER_FILTER, [config.LDAP_EMAIL_ATTR])
+					ulist.append(u_email[0][1][config.LDAP_EMAIL_ATTR][0])
+				else:
+					ulist.append(u.split('=')[1].split(',')[0])
 			except:
 				mdmsg.send(summary='Failed to load user from LDAP', details={'user': u, 'group': group})
 		if 'ipHostNumber' in grp[1]:
@@ -271,7 +288,7 @@ def load_group_rule(usersrcip, usercn, dev, group, networks, uniq_nets):
 			destport = ''
 			if len(destarray) >= 2:
 				destport = destarray[1]
-				for protocol in ['tcp', 'udp']:
+				for protocol in ('tcp', 'udp'):
 					build_firewall_rule(usersrcip, usersrcip, destip, destport,
 										protocol, comment)
 			else:
@@ -287,10 +304,18 @@ def load_group_rule(usersrcip, usercn, dev, group, networks, uniq_nets):
 			return
 
 		comment = usercn + ':' + group + ' file_acl'
-		for destip in fetch_ips_from_file(fd):
-			# create one rule for each direction
-			build_firewall_rule(usersrcip, usersrcip, destip, '', '', comment)
-			build_firewall_rule(usersrcip, destip, usersrcip, '', '', comment)
+		for destination in fetch_ips_from_file(fd):
+			destarray = destination.split(':')
+			destip = destarray[0]
+			destport = ''
+			if len(destarray) >= 2:
+				destport = destarray[1]
+				for protocol in ('tcp', 'udp'):
+					build_firewall_rule(usersrcip, usersrcip, destip, destport, protocol, comment)
+				build_firewall_rule(usersrcip, usersrcip, destip, '', 'icmp', comment)
+			else:
+				build_firewall_rule(usersrcip, usersrcip, destination, '', '', comment)
+				build_firewall_rule(usersrcip, destination, usersrcip, '', '', comment)
 		fd.close()
 
 def load_per_user_rules(usersrcip, usercn, dev):
@@ -347,6 +372,7 @@ def kill_block_hack(usersrcip, usercn):
 	"""
 	try:
 		iptables('-D FORWARD -s ' + usersrcip + ' -j DROP')
+		iptables('-D INPUT -s ' + usersrcip + ' -j DROP')
 	except:
 		mdmsg.send(summary='Failed to delete blocking rule, potential security issue', severity='CRITICAL',
 		details={'vpnip': usersrcip, 'user': usercn})
@@ -363,7 +389,7 @@ def add_chain(usersrcip, usercn, dev):
 			details={'vpnip': usersrcip, 'user': usercn})
 		return False
 	iptables('-N ' + usersrcip)
-	ipset('--create ' + usersrcip + ' nethash')
+	ipset('create ' + usersrcip + ' nethash')
 	usergroups = load_rules(usersrcip, usercn, dev)
 	iptables('-A OUTPUT -d ' + usersrcip + ' -j ' + usersrcip)
 	iptables('-A INPUT -s ' + usersrcip + ' -j ' + usersrcip)
@@ -392,7 +418,7 @@ def del_chain(usersrcip, dev):
 	iptables('-D FORWARD -s ' + usersrcip + ' -j ' + usersrcip, False)
 	iptables('-F ' + usersrcip, False)
 	iptables('-X ' + usersrcip, False)
-	ipset("--destroy " + usersrcip, False)
+	ipset('destroy ' + usersrcip, False)
 
 def update_chain(usersrcip, usercn, dev):
 	"""
