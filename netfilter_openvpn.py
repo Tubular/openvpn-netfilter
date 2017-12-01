@@ -310,7 +310,7 @@ def load_group_rule(usersrcip, usercn, dev, group, networks, uniq_nets):
 			destport = ''
 			if len(destarray) >= 2:
 				destport = destarray[1]
-				for protocol in ['tcp', 'udp']:
+				for protocol in ('tcp', 'udp'):
 					build_firewall_rule(usersrcip, usersrcip, destip, destport, protocol, comment)
 				build_firewall_rule(usersrcip, usersrcip, destip, '', 'icmp', comment)
 			else:
